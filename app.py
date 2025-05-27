@@ -1,6 +1,7 @@
 import os
 from flask import Flask, render_template, request, jsonify
-import supabase
+from supabase import create_client, Client
+import os
 from dotenv import load_dotenv
 
 app = Flask(__name__, static_folder='static', static_url_path='')
@@ -19,7 +20,8 @@ SUPABASE_KEY = os.getenv('SUPABASE_KEY')
 if not SUPABASE_URL or not SUPABASE_KEY:
     raise ValueError("Please set SUPABASE_URL and SUPABASE_KEY in .env file")
 
-client = supabase.create_client(SUPABASE_URL, SUPABASE_KEY)
+# Initialize the Supabase client
+client: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Rota principal
 @app.route("/")
