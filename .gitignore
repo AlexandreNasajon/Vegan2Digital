@@ -26,12 +26,24 @@ wheels/
 # Virtual Environment
 venv/
 env/
+ENV/
 
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
+*~
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Local development
+*.local
+
+# Logs
+logs/
+*.log
 
 # OS generated files
 .DS_Store
@@ -41,3 +53,15 @@ env/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Render specific
+.render/
+*.tmp
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Local development
+instance/
