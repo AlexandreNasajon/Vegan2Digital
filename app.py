@@ -1,9 +1,13 @@
+import os
 from flask import Flask, render_template, request, jsonify
 import supabase
-import os
 from dotenv import load_dotenv
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static', static_url_path='')
+
+# Configurações do Flask
+app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'dev-secret-key')
+app.config['TEMPLATES_AUTO_RELOAD'] = True
 
 # Load environment variables
 load_dotenv()
@@ -51,5 +55,8 @@ def shuffle_deck():
     random.shuffle(deck)
     return deck
 
+# Esta parte garante que o app só será executado quando rodado diretamente
+# e não quando importado como um módulo
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
