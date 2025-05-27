@@ -1,8 +1,9 @@
 import os
 from flask import Flask, render_template, request, jsonify
-from supabase import create_client, Client
 import os
 from dotenv import load_dotenv
+import supabase
+from supabase.client import Client, create_client
 
 app = Flask(__name__, static_folder='static', static_url_path='')
 
