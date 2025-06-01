@@ -5,41 +5,41 @@ from collections import defaultdict
 # Card configuration with base image names (without numbers)
 CARDS = {
     # Aquatic cards
-    'fast_tuna': {'value': 1, 'type': 'aquatic', 'base_image': 'tuna'},
-    'yellow_seahorse': {'value': 1, 'type': 'aquatic', 'base_image': 'seahorse'},
-    'sea_turtle': {'value': 2, 'type': 'aquatic', 'base_image': 'turtle'},
-    'elusive_jellyfish': {'value': 2, 'type': 'aquatic', 'base_image': 'jellyfish'},
-    'happy_dolphin': {'value': 3, 'type': 'aquatic', 'base_image': 'dolphin'},
-    'shy_stingray': {'value': 3, 'type': 'aquatic', 'base_image': 'stingray'},
-    'swift_swordfish': {'value': 3, 'type': 'aquatic', 'base_image': 'swordfish'},
-    'shark': {'value': 4, 'type': 'aquatic', 'base_image': 'shark'},
+    'fast_tuna': {'value': 1, 'type': 'aquatic', 'image': 'tuna1'},
+    'yellow_seahorse': {'value': 1, 'type': 'aquatic', 'image': 'seahorse1'},
+    'sea_turtle': {'value': 2, 'type': 'aquatic', 'image': 'turtle1'},
+    'elusive_jellyfish': {'value': 2, 'type': 'aquatic', 'image': 'jellyfish1'},
+    'happy_dolphin': {'value': 3, 'type': 'aquatic', 'image': 'dolphin1'},
+    'shy_stingray': {'value': 3, 'type': 'aquatic', 'image': 'stingray'},
+    'swift_swordfish': {'value': 3, 'type': 'aquatic', 'image': 'swordfish'},
+    'shark': {'value': 4, 'type': 'aquatic', 'image': 'shark'},
     # Terrestrial cards
-    'tiny_mouse': {'value': 1, 'type': 'terrestrial', 'base_image': 'mouse'},
-    'quick_squirrel': {'value': 1, 'type': 'terrestrial', 'base_image': 'squirrel'},
-    'mountain_goat': {'value': 2, 'type': 'terrestrial', 'base_image': 'goat'},
-    'sly_fox': {'value': 2, 'type': 'terrestrial', 'base_image': 'fox'},
-    'graceful_stag': {'value': 3, 'type': 'terrestrial', 'base_image': 'stag'},
-    'savannah_zebra': {'value': 3, 'type': 'terrestrial', 'base_image': 'zebra'},
-    'fierce_wolf': {'value': 3, 'type': 'terrestrial', 'base_image': 'wolf'},
-    'regal_lion': {'value': 4, 'type': 'terrestrial', 'base_image': 'lion'},
+    'tiny_mouse': {'value': 1, 'type': 'terrestrial', 'image': 'mouse1'},
+    'quick_squirrel': {'value': 1, 'type': 'terrestrial', 'image': 'squirrel1'},
+    'mountain_goat': {'value': 2, 'type': 'terrestrial', 'image': 'goat1'},
+    'sly_fox': {'value': 2, 'type': 'terrestrial', 'image': 'fox1'},
+    'graceful_stag': {'value': 3, 'type': 'terrestrial', 'image': 'stag'},
+    'savannah_zebra': {'value': 3, 'type': 'terrestrial', 'image': 'zebra'},
+    'fierce_wolf': {'value': 3, 'type': 'terrestrial', 'image': 'wolf'},
+    'regal_lion': {'value': 4, 'type': 'terrestrial', 'image': 'lion'},
     # Amphibian cards
-    'pond_frog': {'value': 1, 'type': 'amphibian', 'base_image': 'frog'},
-    'red_crab': {'value': 2, 'type': 'amphibian', 'base_image': 'crab'},
-    'river_otter': {'value': 3, 'type': 'amphibian', 'base_image': 'otter'},
-    'swamp_crocodile': {'value': 4, 'type': 'amphibian', 'base_image': 'crocodile'}
+    'pond_frog': {'value': 1, 'type': 'amphibian', 'image': 'frog1'},
+    'red_crab': {'value': 2, 'type': 'amphibian', 'image': 'crab1'},
+    'river_otter': {'value': 3, 'type': 'amphibian', 'image': 'otter'},
+    'swamp_crocodile': {'value': 4, 'type': 'amphibian', 'image': 'crocodile'}
 }
 
 # Impact cards (event cards that affect gameplay)
 IMPACT_CARDS = {
-    'competition': {'base_image': 'competition'},
-    'confusion': {'base_image': 'confusion'},
-    'domesticate': {'base_image': 'domesticate'},
-    'earthquake': {'base_image': 'earthquake'},
-    'flood': {'base_image': 'flood'},
-    'prey': {'base_image': 'prey'},
-    'scare': {'base_image': 'scare'},
-    'trap': {'base_image': 'trap'},
-    'virus': {'base_image': 'virus'},
+    'competition': {'image': 'competition'},
+    'confusion': {'image': 'confusion'},
+    'domesticate': {'image': 'domesticate'},
+    'earthquake': {'image': 'earthquake'},
+    'flood': {'image': 'flood'},
+    'prey': {'image': 'prey'},
+    'scare': {'image': 'scare'},
+    'trap': {'image': 'trap'},
+    'virus': {'image': 'virus'},
 }
 
 # Deck composition: card_name: quantity
@@ -97,54 +97,28 @@ def create_deck():
         if not card_data:
             continue
             
-        base_image = card_data['base_image']
-        
-        # For each copy of the card, assign the next available image variation
+        # For each copy of the card, create a copy of the card data
         for _ in range(quantity):
-            variation_counters[card_name] += 1
-            variation = variation_counters[card_name]
+            # Create a deep copy of the card data to avoid modifying the original
+            card_copy = card_data.copy()
             
-            # Create the image path based on the card name and variation
-            if card_name == 'fast_tuna':
-                image_path = f'cards/tuna{variation}.png'  # tuna1, tuna2, tuna3
-            elif card_name == 'yellow_seahorse':
-                image_path = f'cards/seahorse{variation}.png'  # seahorse1, seahorse2, seahorse3
-            elif card_name == 'sea_turtle':
-                image_path = f'cards/turtle{min(variation, 2)}.png'  # turtle1, turtle2
-            elif card_name == 'elusive_jellyfish':
-                image_path = f'cards/jellyfish{min(variation, 2)}.png'  # jellyfish1, jellyfish2
-            elif card_name == 'tiny_mouse':
-                image_path = f'cards/mouse{variation}.png'  # mouse1, mouse2, mouse3
-            elif card_name == 'quick_squirrel':
-                image_path = f'cards/squirrel{variation}.png'  # squirrel1, squirrel2, squirrel3
-            elif card_name == 'mountain_goat':
-                image_path = f'cards/goat{min(variation, 2)}.png'  # goat1, goat2
-            elif card_name == 'sly_fox':
-                image_path = f'cards/fox{min(variation, 2)}.png'  # fox1, fox2
-            elif card_name == 'pond_frog':
-                image_path = f'cards/frog{variation}.png'  # frog1, frog2, frog3
-            elif card_name == 'red_crab':
-                image_path = f'cards/crab{min(variation, 2)}.png'  # crab1, crab2
-            else:
-                # For cards without variations, use the base image
-                image_path = f'cards/{base_image}.png'
+            # If the card has an image field, use it directly
+            if 'image' in card_copy:
+                card_copy['image'] = f"cards/{card_copy['image']}.png"
             
-            # Add the card to the deck
-            deck.append({
-                'name': card_name,
-                'image': image_path,
-                **{k: v for k, v in card_data.items() if k != 'base_image'}
-            })
+            # Add the card to the deck with its name
+            card_copy['name'] = card_name
+            deck.append(card_copy)
     
     # Then handle impact cards (1 of each)
     for card_name, card_data in IMPACT_CARDS.items():
-        for _ in range(1):  #  of each impact card
-            deck.append({
-                'name': card_name,
-                'image': f'cards/{card_data["base_image"]}.png',
-                'type': 'impact'
-            })
-    
+        card_copy = card_data.copy()
+        card_copy['name'] = card_name
+        card_copy['type'] = 'impact'
+        card_copy['effect'] = card_name
+        if 'image' in card_copy:
+            card_copy['image'] = f'cards/{card_copy["image"]}.png'
+        deck.append(card_copy)
     return deck
 
 def initialize_cards():

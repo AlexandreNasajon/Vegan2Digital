@@ -1,9 +1,20 @@
 import os
-from flask import Flask, jsonify, request
 import secrets
-import string
+from flask import Flask, request, jsonify, make_response
 import firebase_admin
 from firebase_admin import credentials, firestore
+import random
+import string
+import time
+import copy
+from functools import wraps
+from cards import CARDS, DECK_COMPOSITION, create_deck
+
+
+# Initialize Firebase Admin SDK
+cred = credentials.Certificate('vegan-cardgame-firebase-adminsdk-fbsvc-b2013bb175.json')
+firebase_admin.initialize_app(cred)
+db = firestore.client()
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -54,50 +65,46 @@ def verify_player_turn(room_data, player_token, expected_state=None):
         
     return player, None, None
 
-# Initialize Firebase Admin SDK
-cred = credentials.Certificate('vegan-cardgame-firebase-adminsdk-fbsvc-b2013bb175.json')
-firebase_admin.initialize_app(cred)
-db = firestore.client()
-
-app = Flask(__name__)
-
-# Card configuration
-CARD_TYPES = {
-    # Aquatic cards
-    'tuna': {'value': 1, 'type': 'aquatic'},
-    'jellyfish': {'value': 2, 'type': 'aquatic'},
-    'dolphin': {'value': 3, 'type': 'aquatic'},
-    'shark': {'value': 4, 'type': 'aquatic'},
-    # Terrestrial cards
-    'rat': {'value': 1, 'type': 'terrestrial'},
-    'fox': {'value': 2, 'type': 'terrestrial'},
-    'stag': {'value': 3, 'type': 'terrestrial'},
-    'lion': {'value': 4, 'type': 'terrestrial'},
-    # Amphibian cards
-    'frog': {'value': 1, 'type': 'amphibian'},
-    'crab': {'value': 2, 'type': 'amphibian'},
-    'otter': {'value': 3, 'type': 'amphibian'},
-    'crocodile': {'value': 4, 'type': 'amphibian'}
-}
-
-# Deck composition: card_name: quantity
-DECK_COMPOSITION = {
-    # Aquatic cards
-    'tuna': 5,
-    'jellyfish': 4,
-    'dolphin': 3,
-    'shark': 1,
-    # Terrestrial cards
-    'rat': 5,
-    'fox': 4,
-    'stag': 3,
-    'lion': 1,
-    # Amphibian cards
-    'frog': 3,
-    'crab': 2,
-    'otter': 1,
-    'crocodile': 1
-}
+def filter_game_data_for_player(game_data, player_number):
+    """
+    Filter game data to only show information visible to the requesting player.
+    
+    Args:
+        game_data (dict): The complete game data from Firestore
+        player_number (int): The player number (1 or 2) making the request
+        
+    Returns:
+        dict: Filtered game data with hidden information removed
+    """
+    if not game_data:
+        return {}
+        
+    # Create a deep copy to avoid modifying the original
+    filtered_data = copy.deepcopy(game_data)
+    
+    # Determine opponent number
+    opponent_number = 2 if player_number == 1 else 1
+    
+    # Hide opponent's hand but keep the image field
+    if 'players' in filtered_data and len(filtered_data['players']) >= opponent_number:
+        opponent_index = opponent_number - 1
+        if 'hand' in filtered_data['players'][opponent_index]:
+            # Show only the count of cards in opponent's hand, but keep the image field
+            filtered_data['players'][opponent_index]['hand'] = [
+                {'face_down': True, 'image': card.get('image', '')} 
+                for card in filtered_data['players'][opponent_index]['hand']
+            ]
+    
+    # Ensure image field is present in play area cards
+    if 'play_area' in filtered_data:
+        for card in filtered_data['play_area']:
+            if 'owner' in card and card['owner'] == opponent_number and card.get('face_down', False):
+                card['hidden'] = True
+            # Ensure image field exists
+            if 'image' not in card:
+                card['image'] = ''
+    
+    return filtered_data
 
 def generate_room_key(length=8):
     """Generate a unique room key."""
@@ -117,20 +124,8 @@ def create_room():
         room_key = generate_room_key()
         first_player_token = generate_token()
         
-        # Initialize deck with cards and shuffle
-        deck = []
-        for card_name, count in DECK_COMPOSITION.items():
-            card_info = CARD_TYPES[card_name]
-            deck.extend([
-                {
-                    'name': card_name,
-                    'value': card_info['value'],
-                    'type': card_info['type']
-                } 
-                for _ in range(count)
-            ])
-        # Shuffle the deck
-        import random
+        # Initialize deck with cards from cards.py and shuffle
+        deck = create_deck()
         random.shuffle(deck)
         
         # Create room data with initial game state
@@ -183,7 +178,10 @@ def deal_initial_cards(room_ref):
             if deck and i < len(players):
                 if 'hand' not in players[i]:
                     players[i]['hand'] = []
-                players[i]['hand'].append(deck.pop())
+                card = deck.pop()
+                if isinstance(card, dict) and 'image' not in card:
+                    card['image'] = ''
+                players[i]['hand'].append(card)
     
     # Update only the necessary fields using set with merge
     update_data = {
@@ -285,6 +283,62 @@ def join_room(room_key):
         return jsonify({
             'error': str(e)
         }), 500
+
+@app.route('/render_info', methods=['GET'])
+def render_info():
+    """Get the current game state for rendering."""
+    try:
+        # Get parameters from query string
+        room_key = request.args.get('room_key')
+        player_token = request.args.get('player_token')
+                
+        print(f"Received request with params - room_key: {room_key}, player_token: {player_token}")
+        
+        # Check for required parameters
+        if not all([room_key, player_token]):
+            return jsonify({'error': 'Missing required parameters (room_key, player_token)'}), 400
+        
+        # Get room data
+        room_ref = db.collection('rooms').document(room_key)
+        room = room_ref.get()
+        
+        if not room.exists:
+            return jsonify({'error': 'Room not found'}), 404
+            
+        room_data = room.to_dict()
+        
+        # Find the player's index based on the token
+        players = room_data.get('players', [])
+        player_idx = None
+        opponent_idx = None
+        
+        for i, player in enumerate(players):
+            if player.get('token') == player_token:
+                player_idx = i
+                opponent_idx = 1 if i == 0 else 0
+                break
+                    
+        if player_idx is None:
+            return jsonify({'error': 'Invalid player token'}), 403
+                
+        # Get player and opponent data
+        player_data = players[player_idx] if player_idx < len(players) else {}
+        opponent_data = players[opponent_idx] if opponent_idx < len(players) else {}
+        
+        return jsonify({
+            'player_field': player_data.get('field', []),
+            'opponent_field': opponent_data.get('field', []),
+            'player_hand': player_data.get('hand', []),
+            'opponent_hand_count': len(opponent_data.get('hand', [])),
+            'player_score': player_data.get('score', 0),
+            'opponent_score': opponent_data.get('score', 0),
+            'current_turn': room_data.get('current_turn'),
+            'game_state': room_data.get('game_state', 'unknown'),
+            'your_turn': room_data.get('current_turn') == player_idx + 1
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/player_action', methods=['GET'])
 def player_action():
@@ -391,8 +445,10 @@ def player_action():
             if card_index < 0 or card_index >= len(player_hand):
                 return jsonify({'error': 'Invalid card selection'}), 400
             
-            # Get the selected card
+            # Get the selected card and ensure it has an image field
             card = player_hand.pop(card_index)
+            if 'image' not in card:
+                card['image'] = ''
             
             # Add to field
             if 'field' not in player_data:
@@ -427,14 +483,20 @@ def player_action():
             drawn_cards = []
             for _ in range(2):
                 if deck:
-                    drawn_cards.append(deck.pop())
+                    card = deck.pop()
+                    if 'image' not in card:
+                        card['image'] = ''
+                    drawn_cards.append(card)
                 # If deck is empty but there are cards in discard pile, shuffle them into the deck
                 elif not deck and discard_pile:
-                    deck = discard_pile.copy()
+                    deck = [card for card in discard_pile if isinstance(card, dict)]
                     random.shuffle(deck)
                     discard_pile = []
                     if deck:  # If we managed to refill the deck
-                        drawn_cards.append(deck.pop())
+                        card = deck.pop()
+                        if 'image' not in card:
+                            card['image'] = ''
+                        drawn_cards.append(card)
             
             # Update player's hand with drawn cards
             player_hand.extend(drawn_cards)
@@ -612,5 +674,60 @@ def get_scores(room_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+def test_filter_game_data():
+    """Test the filter_game_data_for_player function with sample game data."""
+    # Sample game data
+    sample_game = {
+        'game_id': 'test123',
+        'current_turn': 1,
+        'game_state': 'playing',
+        'players': [
+            {
+                'id': 'player1',
+                'token': 'token1',
+                'name': 'Alice',
+                'hand': [
+                    {'id': 'card1', 'name': 'Wolf', 'attack': 3, 'health': 5},
+                    {'id': 'card2', 'name': 'Rabbit', 'attack': 1, 'health': 2}
+                ],
+                'health': 30
+            },
+            {
+                'id': 'player2',
+                'token': 'token2',
+                'name': 'Bob',
+                'hand': [
+                    {'id': 'card3', 'name': 'Bear', 'attack': 4, 'health': 6},
+                    {'id': 'card4', 'name': 'Fox', 'attack': 2, 'health': 3},
+                    {'id': 'card5', 'name': 'Deer', 'attack': 2, 'health': 4}
+                ],
+                'health': 30
+            }
+        ],
+        'play_area': [
+            {'id': 'card6', 'name': 'Owl', 'attack': 2, 'health': 3, 'owner': 1, 'face_down': False},
+            {'id': 'card7', 'name': 'Eagle', 'attack': 3, 'health': 2, 'owner': 2, 'face_down': True}
+        ]
+    }
+    
+    print("=== Testing filter_game_data_for_player ===\n")
+    
+    # Test for player 1
+    print("--- Player 1's view ---")
+    filtered_p1 = filter_game_data_for_player(sample_game, 1)
+    print("Player 1's hand:", filtered_p1['players'][0]['hand'])  # Should show actual cards
+    print("Player 2's hand:", filtered_p1['players'][1]['hand'])  # Should show face-down cards
+    print("Play area:", filtered_p1['play_area'])  # Should show face-up cards and hide face-down opponent cards
+    
+    # Test for player 2
+    print("\n--- Player 2's view ---")
+    filtered_p2 = filter_game_data_for_player(sample_game, 2)
+    print("Player 1's hand:", filtered_p2['players'][0]['hand'])  # Should show face-down cards
+    print("Player 2's hand:", filtered_p2['players'][1]['hand'])  # Should show actual cards
+    print("Play area:", filtered_p2['play_area'])  # Should show face-up cards and hide face-down opponent cards
+
 if __name__ == '__main__':
+    # Run the test function
+    test_filter_game_data()
+    # Start the Flask app
     app.run(debug=True, port=5000)
